@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -78,6 +79,10 @@ func (h *UserHandler) CreateUser(c echo.Context) error {
 		Role:     req.Role,
 	}, consts.GetLicenseEdition(c))
 	if err != nil {
+		if errors.Is(err, domain.ErrMaxAdminLimitReached) {
+			limit := domain.GetBaseEditionLimitation(c.Request().Context()).MaxAdmin
+			return h.NewResponseWithError(c, fmt.Sprintf("已达到后台账号数量上限（%d 个），请联系站点管理员调整配额。", limit), nil)
+		}
 		return h.NewResponseWithError(c, "failed to create user", err)
 	}
 

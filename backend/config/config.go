@@ -21,6 +21,7 @@ type Config struct {
 	Sentry        SentryConfig `mapstructure:"sentry"`
 	CaddyAPI      string       `mapstructure:"caddy_api"`
 	SubnetPrefix  string       `mapstructure:"subnet_prefix"`
+	Quota         QuotaConfig  `mapstructure:"quota"`
 }
 
 type LogConfig struct {
@@ -132,6 +133,10 @@ func NewConfig() (*Config, error) {
 		},
 		CaddyAPI:     "/app/run/caddy-admin.sock",
 		SubnetPrefix: "169.254.15",
+		Quota: QuotaConfig{
+			MaxNodes:  300,
+			MaxAdmins: 1,
+		},
 	}
 
 	viper.AddConfigPath(".")
@@ -154,6 +159,9 @@ func NewConfig() (*Config, error) {
 
 	// finally, override sensitive info with env variables
 	overrideWithEnv(defaultConfig)
+	if err := overrideQuotaWithEnv(&defaultConfig.Quota); err != nil {
+		return nil, err
+	}
 
 	return defaultConfig, nil
 }

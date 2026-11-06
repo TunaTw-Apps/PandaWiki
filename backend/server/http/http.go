@@ -18,6 +18,7 @@ import (
 	_ "github.com/chaitin/panda-wiki/docs"
 
 	"github.com/chaitin/panda-wiki/config"
+	"github.com/chaitin/panda-wiki/domain"
 	"github.com/chaitin/panda-wiki/log"
 	PWMiddleware "github.com/chaitin/panda-wiki/middleware"
 )
@@ -70,6 +71,7 @@ func NewEcho(
 	}
 	// register validator
 	e.Validator = &echoValidator{validator: validator.New()}
+	e.Use(baseEditionQuotas(config.Quota))
 
 	// Add Sentry middleware if enabled
 	if config.Sentry.Enabled && config.Sentry.DSN != "" {
@@ -125,6 +127,16 @@ func NewEcho(
 	e.Use(sessionMiddleware.Session())
 
 	return e
+}
+
+func baseEditionQuotas(quota config.QuotaConfig) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			ctx := domain.WithBaseEditionQuotas(c.Request().Context(), quota.MaxNodes, quota.MaxAdmins)
+			c.SetRequest(c.Request().WithContext(ctx))
+			return next(c)
+		}
+	}
 }
 
 type MyBinder struct {

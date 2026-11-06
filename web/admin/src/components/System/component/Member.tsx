@@ -226,7 +226,7 @@ const Member = () => {
         <Box sx={{ fontSize: 14, lineHeight: '24px', fontWeight: 'bold' }}>
           用户管理
         </Box>
-        <MemberAdd refresh={getData} userLen={userList.length} />
+        <MemberAdd refresh={getData} />
       </Stack>
       <Table
         columns={columns}
