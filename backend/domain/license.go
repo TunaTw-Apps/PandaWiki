@@ -7,6 +7,8 @@ import (
 
 const ContextKeyEditionLimitation contextKey = "edition_limitation"
 
+const contextKeyBaseEditionLimitation contextKey = "base_edition_limitation"
+
 type BaseEditionLimitation struct {
 	MaxKb                  int   `json:"max_kb"`                     // 知识库站点数量
 	MaxNode                int   `json:"max_node"`                   // 单个知识库下文档数量
@@ -29,16 +31,27 @@ var baseEditionLimitationDefault = BaseEditionLimitation{
 	MaxNode:  300,
 }
 
-func GetBaseEditionLimitation(c context.Context) BaseEditionLimitation {
+// WithBaseEditionQuotas applies validated deployment quotas without changing feature permissions.
+func WithBaseEditionQuotas(ctx context.Context, maxNodes int, maxAdmins int64) context.Context {
+	limitation := baseEditionLimitationDefault
+	limitation.MaxNode = maxNodes
+	limitation.MaxAdmin = maxAdmins
+	return context.WithValue(ctx, contextKeyBaseEditionLimitation, limitation)
+}
 
+func GetBaseEditionLimitation(c context.Context) BaseEditionLimitation {
+	baseLimitation, ok := c.Value(contextKeyBaseEditionLimitation).(BaseEditionLimitation)
+	if !ok {
+		baseLimitation = baseEditionLimitationDefault
+	}
 	edition, ok := c.Value(ContextKeyEditionLimitation).([]byte)
 	if !ok {
-		return baseEditionLimitationDefault
+		return baseLimitation
 	}
 
 	var editionLimitation BaseEditionLimitation
 	if err := json.Unmarshal(edition, &editionLimitation); err != nil {
-		return baseEditionLimitationDefault
+		return baseLimitation
 	}
 
 	return editionLimitation

@@ -15,3 +15,5 @@ var ErrPermissionDenied = errors.New("permission denied")
 var ErrInternalServerError = errors.New("internal server error")
 
 var ErrMaxNodeLimitReached = errors.New("max node limit reached")
+
+var ErrMaxAdminLimitReached = errors.New("max admin limit reached")

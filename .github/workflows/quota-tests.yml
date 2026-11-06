@@ -1,0 +1,96 @@
+name: Quota Regression Check
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quota-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quota-tests:
+    name: Quota tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: backend
+
+    env:
+      GOTOOLCHAIN: local
+      GOFLAGS: -mod=readonly
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: quota_ci_only
+          POSTGRES_DB: pandawiki_quota_test
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pandawiki_quota_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Check out open-source code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          submodules: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Test configuration, domain, and HTTP middleware
+        run: go test ./config ./domain ./server/http -count=1
+
+      - name: Test PostgreSQL quota boundaries
+        env:
+          PANDAWIKI_TEST_POSTGRES_DSN: >-
+            host=127.0.0.1 port=${{ job.services.postgres.ports['5432'] }}
+            user=postgres password=quota_ci_only dbname=pandawiki_quota_test sslmode=disable
+        run: |
+          set -euo pipefail
+          : "${PANDAWIKI_TEST_POSTGRES_DSN:?PostgreSQL quota tests require a DSN}"
+          report="$RUNNER_TEMP/quota-integration.jsonl"
+          go test ./repo/pg -run '^TestQuotaIntegration' -json -count=1 -timeout 2m | tee "$report"
+          python3 - "$report" <<'PY'
+          import json
+          import sys
+
+          expected = {
+              "TestQuotaIntegrationNodes",
+              "TestQuotaIntegrationBackendAccounts",
+          }
+          passed = set()
+          with open(sys.argv[1], encoding="utf-8") as report:
+              for line in report:
+                  event = json.loads(line)
+                  if event.get("Action") == "pass":
+                      passed.add(event.get("Test"))
+          missing = expected - passed
+          if missing:
+              sys.exit("Quota tests did not pass: " + ", ".join(sorted(missing)))
+          print("Both PostgreSQL quota boundary tests passed.")
+          PY
+
+      - name: Build open-source services
+        env:
+          CGO_ENABLED: '0'
+        run: go build ./cmd/api ./cmd/consumer ./cmd/migrate
